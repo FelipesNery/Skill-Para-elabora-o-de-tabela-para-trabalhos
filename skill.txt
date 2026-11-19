@@ -1,0 +1,216 @@
+---
+name: tabela-cientifica-r
+description: Cria tabelas descritivas para trabalhos científicos e artigos (estilo "Tabela 1") a partir de uma planilha do usuário (xlsx, csv com vírgula ou csv2 com ponto e vírgula), usando R com gtsummary, e entrega o resultado em .docx. Use esta skill sempre que o usuário escrever "tabela" ou pedir para montar, gerar ou formatar uma tabela de resultados, de características da amostra, descritiva ou comparativa entre grupos (com p-valor), mesmo que ele não mencione R ou gtsummary.
+---
+
+# Tabela científica com R + gtsummary
+
+Esta skill conduz o usuário passo a passo, da planilha bruta até uma tabela formatada em Word, pronta para um trabalho ou artigo. Ela é interativa: em vários pontos você precisa **parar e esperar a resposta do usuário** antes de seguir. Não adivinhe tipos de variáveis nem o grupo comparador. A tabela vai para uma publicação científica, e uma variável classificada errado (uma data tratada como texto, um código tratado como número) gera estatísticas erradas.
+
+Fale com o usuário em português, de forma simples. Muitos usuários são pesquisadores, não programadores.
+
+## Ambiente
+
+- Rode o R com `Rscript`. No Windows, se `Rscript` não estiver no PATH, procure em `C:\Program Files\R\R-*\bin\Rscript.exe`.
+- Grave os scripts `.R` numa pasta de trabalho temporária, não na pasta da planilha do usuário.
+- Se o R não estiver instalado, avise o usuário e indique https://cran.r-project.org antes de continuar.
+
+## Etapa 1: instalar e carregar os pacotes
+
+Pacotes: `tidyverse`, `readxl`, `readr`, `gtsummary`. Para exportar para Word também são necessários `flextable` e `officer`, porque o gtsummary converte a tabela para flextable para gerar o .docx.
+
+Instale apenas o que faltar (instalar tudo de novo a cada vez é lento):
+
+```r
+pacotes <- c("tidyverse", "readxl", "readr", "gtsummary", "flextable", "officer")
+faltando <- pacotes[!pacotes %in% rownames(installed.packages())]
+if (length(faltando) > 0) install.packages(faltando, repos = "https://cloud.r-project.org")
+
+library(tidyverse)
+library(readxl)
+library(readr)
+library(gtsummary)
+library(flextable)
+library(officer)
+
+# Tabela em português: cabeçalhos, notas dos testes ("Teste exato de Fisher"),
+# estatísticas ("Mediana (Q1, Q3)") e vírgula como separador decimal.
+# Precisa vir ANTES de tbl_summary(), senão a tabela sai em inglês.
+theme_gtsummary_language("pt", decimal.mark = ",", big.mark = ".")
+```
+
+## Etapa 2: importar o banco
+
+Olhe a extensão do arquivo que o usuário enviou.
+
+- **.xlsx** → `read_xlsx()`
+- **.csv** → abra as primeiras linhas e veja o delimitador:
+  - separado por `,` → `read_csv()`
+  - separado por `;` → `read_csv2()` (padrão brasileiro, em que a vírgula é o separador decimal)
+
+Importe **todas as colunas como texto (character)**. Assim nada é convertido automaticamente de forma errada, e os tipos são definidos depois, com o usuário:
+
+```r
+dados <- read_xlsx("data.xlsx", col_types = "text")
+dados <- read_csv("data.csv", col_types = cols(.default = "c"))
+dados <- read_csv2("data.csv", col_types = cols(.default = "c"))
+```
+
+Se a importação falhar ou as colunas vierem misturadas numa só, o delimitador provavelmente está errado. Teste o outro.
+
+## Etapa 3: selecionar as variáveis e definir os tipos
+
+1. Mostre ao usuário a lista numerada das variáveis do banco (nomes das colunas). Se ajudar, mostre também 2 ou 3 valores de exemplo de cada uma.
+2. Peça para ele escrever **quais variáveis devem aparecer na tabela**. **Pare e espere a resposta.**
+3. Depois, **sugira o tipo de cada variável escolhida** de uma só vez, olhando os valores do banco. Os tipos possíveis são:
+   - **texto** (categorias, como sexo ou escolaridade) → mantém `character`
+   - **número com casas decimais** (peso, renda) → `numeric`
+   - **número inteiro** (idade em anos, número de filhos) → `integer`
+   - **data** → `Date`
+
+   Para sugerir, examine os valores não vazios de cada coluna: se todos têm formato de data (ex.: `15/03/2024`, `2024-03-15`) ou de número serial do Excel numa coluna com nome de data, sugira **data**; se todos são números sem casas decimais, sugira **inteiro**; se todos são números e algum tem casas decimais (com `,` ou `.`), sugira **decimal**; caso contrário, sugira **texto**.
+
+   Mostre a sugestão numa tabela simples, com valores de exemplo para o usuário conferir:
+
+   ```
+   | Nº | Variável     | Exemplos              | Tipo sugerido |
+   |----|--------------|-----------------------|---------------|
+   | 1  | sexo         | F, M, F               | texto         |
+   | 2  | idade        | 34, 51, 28            | inteiro       |
+   | 3  | peso         | 70,5; 82,1; 65,0      | decimal       |
+   | 4  | data_coleta  | 15/03/2024, 02/04/2024| data          |
+   ```
+
+   Pergunte: **"Esses tipos estão corretos? Se algum estiver errado, me diga o número ou o nome da variável e o tipo certo."** **Pare e espere a resposta.** Aplique as correções e só siga quando o usuário confirmar.
+
+   Destaque na sugestão os casos ambíguos, porque é neles que o erro costuma acontecer: códigos numéricos que na verdade são categorias (ex.: `1 = masculino, 2 = feminino`, CEP, número de prontuário) devem ser **texto**, mesmo parecendo inteiros. Se uma coluna de números inteiros tiver poucos valores diferentes (até uns 5), avise que ela pode ser um código de categoria e pergunte.
+4. **Codebook (rótulos).** Se alguma variável de texto tiver códigos numéricos (ex.: `0`, `1`, `2`), a tabela vai mostrar esses números em vez das categorias, o que não serve para publicação. Pergunte: **"Seu banco tem codebook (dicionário de dados)? Se tiver, envie o arquivo ou cole o conteúdo aqui."** **Pare e espere a resposta.**
+
+   O usuário pode enviar o codebook de várias formas, e todas servem:
+   - **planilha (xlsx/csv)**: o formato recomendado é uma linha por código, com as colunas `variavel`, `codigo`, `rotulo` e, opcionalmente, `nome_na_tabela` (como a variável deve aparecer na tabela, ex.: `escolaridade` → "Escolaridade"). Se as colunas tiverem outros nomes, identifique qual é qual pelo conteúdo;
+   - **texto colado** no chat, como `sexo: 0 = Masculino, 1 = Feminino`;
+   - **script R** com `factor(..., levels = ..., labels = ...)` ou uma lista de `label`: extraia dali os códigos e os nomes.
+
+   Se o usuário não tiver codebook, ofereça para ele digitar os rótulos das variáveis codificadas, ou para manter os códigos.
+
+   Antes de aplicar, mostre um resumo do que entendeu (variável → código = rótulo) e peça confirmação, porque um rótulo trocado (ex.: 0 = Masculino em vez de Feminino) inverte o resultado da tabela sem que ninguém perceba. Avise também se o banco tiver um código que não está no codebook: ele viraria NA e sumiria da tabela.
+
+   Aplique os rótulos como `factor`, mantendo a ordem do codebook:
+
+   ```r
+   # codebook: data frame com variavel, codigo, rotulo (todas como texto)
+   for (v in intersect(unique(codebook$variavel), names(dados))) {
+     cb <- filter(codebook, variavel == v)
+     dados[[v]] <- factor(dados[[v]], levels = cb$codigo, labels = cb$rotulo)
+   }
+   ```
+
+   **Nomes das variáveis na tabela.** Nomes de coluna como `raca` ou `dt_nasc` não servem para publicação. Monte uma lista `nomes_tabela` com o nome de exibição de **todas** as variáveis da tabela:
+   - se o codebook trouxer `nome_na_tabela` (ou equivalente), use esse nome;
+   - se não trouxer, **sugira um nome** a partir do nome da coluna e do conteúdo: corrija acentos e abreviações, use inicial maiúscula e acrescente a unidade quando ela for óbvia (ex.: `raca` → "Raça/cor", `idade` → "Idade (anos)", `comorbi` → "Comorbidade").
+
+   Quando algum nome for sugerido por você, mostre um alerta antes de gerar a tabela e repita o alerta na entrega:
+
+   > ⚠️ **Nomes sugeridos:** o codebook não tinha o nome destas variáveis, então eu sugeri: `raca` → "Raça/cor", `idade` → "Idade (anos)". Se algum estiver errado, você pode corrigir direto no arquivo .docx (ou me dizer agora que eu gero de novo).
+
+   Não pare para esperar resposta por causa desse alerta. O nome é fácil de corrigir no Word e não altera nenhum resultado, ao contrário dos rótulos dos códigos.
+
+   ```r
+   nomes_tabela <- list(idade = "Idade (anos)", raca = "Raça/cor")
+   ```
+
+5. Pergunte: **"Posso continuar ou você quer comparar grupos (por exemplo, por sexo ou por tratamento)?"**
+   - Se não quiser → Etapa 4A.
+   - Se quiser → peça qual variável é o grupo comparador e siga para a Etapa 4B. Ela deve ser categórica (texto). Se for a mesma de uma variável já selecionada, retire-a das linhas da tabela.
+
+6. Na mesma mensagem, pergunte o **título da tabela** (ex.: "Tabela 1. Características sociodemográficas segundo o sexo"). Se o usuário não quiser título, gere sem `modify_caption()`. Escreva o título **sem** `**`: no Word, os asteriscos aparecem literalmente.
+
+### Conversão dos tipos
+
+Converta com cuidado, porque os dados chegaram como texto:
+
+```r
+dados <- dados %>%
+  select(all_of(vars_escolhidas)) %>%
+  mutate(
+    # decimais: aceita vírgula ou ponto como separador decimal
+    across(all_of(vars_numeric), ~ as.numeric(str_replace(.x, ",", "."))),
+    across(all_of(vars_integer), ~ as.integer(str_replace(.x, ",", "."))),
+    across(all_of(vars_date), converter_data)
+  )
+```
+
+Para datas, leve em conta os dois formatos mais comuns:
+
+```r
+converter_data <- function(x) {
+  # xlsx lido como texto traz datas como número serial do Excel (ex.: "45231")
+  if (all(grepl("^[0-9]+(\\.[0-9]+)?$", na.omit(x)))) {
+    return(as.Date(as.numeric(x), origin = "1899-12-30"))
+  }
+  as.Date(parse_date_time(x, orders = c("dmy", "ymd", "mdy")))
+}
+```
+
+Depois de converter, confira se surgiram NAs novos (valores que não puderam ser convertidos). Se surgiram, mostre ao usuário quais valores falharam e pergunte como tratar, em vez de seguir em silêncio.
+
+Observação: no gtsummary, variáveis inteiras com poucos valores diferentes (como escores de 0 a 5) aparecem como categóricas por padrão. Se o usuário classificou como inteiro e espera média/mediana, force o tipo contínuo com `type = list(var ~ "continuous")`.
+
+## Etapa 4A: tabela sem grupo comparador
+
+Só faça esta etapa se o usuário disse que **não** quer grupo de comparação.
+
+```r
+tabela <- dados %>%
+  tbl_summary(missing = "no", label = nomes_tabela) %>%
+  modify_header(label ~ "**Variáveis**") %>%
+  modify_caption("Tabela 1. ...") %>%  # título dado pelo usuário; omita se não houver
+  bold_labels()
+```
+
+## Etapa 4B: tabela com grupo comparador
+
+Só faça esta etapa se o usuário escolheu um grupo comparador.
+
+```r
+tabela <- dados %>%
+  tbl_summary(by = grupo, missing = "no", label = nomes_tabela) %>%
+  add_p() %>%
+  modify_header(label ~ "**Variáveis**") %>%
+  modify_caption("Tabela 1. ...") %>%  # título dado pelo usuário; omita se não houver
+  bold_labels()
+```
+
+`grupo` é o nome da coluna escolhida pelo usuário.
+
+Algumas notas de teste não têm tradução no tema "pt" (ex.: "Wilcoxon rank sum exact test"). Confira as notas com `tabela$table_styling$footnote_header` (ou leia o .docx gerado) e, se sobrar texto em inglês, substitua:
+
+```r
+tabela <- tabela %>%
+  modify_footnote_header(footnote = "Teste de Wilcoxon-Mann-Whitney; Teste exato de Fisher",
+                         columns = p.value)
+```
+
+Escreva os testes que de fato foram usados (veja em `tabela$table_body$test_name`): `wilcox.test` → "Teste de Wilcoxon-Mann-Whitney", `kruskal.test` → "Teste de Kruskal-Wallis", `chisq.test` → "Teste qui-quadrado de Pearson", `fisher.test` → "Teste exato de Fisher". Se o grupo tiver valores ausentes, essas linhas saem da tabela. Avise o usuário quantas foram.
+
+## Etapa 5: exportar para Word (.docx)
+
+Converta para flextable, adicione as notas de rodapé e salve:
+
+```r
+tabela %>%
+  as_flex_table() %>%
+  add_footer_lines(c(
+    "Nota: valores ausentes (missing) não foram exibidos; por isso, algumas porcentagens podem não somar 100% ou não refletir o total da amostra.",
+    "Tabela gerada com auxílio de inteligência artificial, que pode cometer erros. Confira os resultados antes de publicar."
+  )) %>%
+  save_as_docx(path = "tabela.docx")
+```
+
+Salve o .docx na mesma pasta da planilha do usuário (ou onde ele pedir), com um nome descritivo, por exemplo `tabela_<nome-da-planilha>.docx`.
+
+Ao entregar:
+- informe o caminho completo do arquivo;
+- resuma em uma ou duas linhas o que a tabela contém (número de observações, variáveis, grupo comparador e testes usados no p-valor, se houver);
+- se algum nome de variável foi sugerido por você, repita o alerta de **nomes sugeridos**, dizendo que podem ser corrigidos no .docx;
+- repita os dois avisos: com `missing = "no"` algumas porcentagens podem não estar corretas por causa dos valores ausentes, e a IA pode cometer erros, então os resultados devem ser conferidos.
