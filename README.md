@@ -9,7 +9,7 @@ Antes de abordar sobre a Skill, é importante salientar alguns pontos.\
 
 ## Como adicionar a Skill no seu claude
 
-- Há duas formas para fazer a inserção da skill na sua conta.
+- Há duas formas para fazer a inserção da skill na sua conta.\
 1- Atráves das instruções de um projeto.
   Você deve criar um projeto no claude com o nome que desejar, recomento "Criação de tabelas".
   Em seguida vá em instruções e cole o texto disponível em skill.txt
