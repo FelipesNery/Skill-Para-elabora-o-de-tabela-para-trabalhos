@@ -23,6 +23,6 @@ Antes de abordar sobre a Skill, é importante salientar alguns pontos.\
   
 
 ## Como testar se funcionou?
-Para testar, anexe em uma conversa nova uma tabela no formato xlsx ou csv e peça para criar uma tabela com os dados. Caso a IA não lhe pergunte nada e mostra uma tabela pronta, a Skill não foi ativada, caso ela pergunte como deve proceder nos próximos passos ela foi ativada.\
+Para testar, anexe em uma conversa nova uma tabela no formato xlsx ou csv e peça para criar uma tabela com os dados. Caso a IA não lhe pergunte nada e mostre uma tabela pronta, a Skill não foi ativada, caso ela pergunte como deve proceder nos próximos passos ela foi ativada.\
 No caso da não ativação, para que ela seja ativada basta pedir no chat que ela faça a tabela de acordo com a skill tabela científica r.
 
