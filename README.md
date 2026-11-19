@@ -15,11 +15,11 @@ Antes de abordar sobre a Skill, é importante salientar alguns pontos.\
   Em seguida vá em instruções e cole o texto disponível em [Skill.txt](skill.txt).
 
 2 - Através das configurações de uma Skill.\
-  Acesse as configurações do se Claude desktop\
-  Vá em recursos e habilite a Pesquisa de Conectores\
-  Após configurado vá na aba skills e clique a adicionar\
-  Escolha a opção de Fazer upload de Skill\
-  Após isso arraste ou procure a skill tabela-cientifica-r.zip que você pode baixar [Tabela.zip](tabela-cientifica-r.zip)
+  Acesse as configurações do se Claude desktop;\
+  Vá em recursos e habilite a Pesquisa de Conectores;\
+  Após configurado vá na aba skills e clique a adicionar;\
+  Escolha a opção de Fazer upload de Skill;\
+  Após isso arraste ou procure a skill tabela-cientifica-r.zip que você pode baixar [Tabela.zip](tabela-cientifica-r.zip).
   
 
 
